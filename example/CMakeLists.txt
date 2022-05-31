@@ -4,6 +4,7 @@ set(src_precompiled
     "src/precompiled.hpp")
 
 set(src_example
+    "src/solver.hpp"
     "src/main.cpp")
 
 set(src_files

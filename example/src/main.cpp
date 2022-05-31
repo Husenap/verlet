@@ -4,6 +4,8 @@
 #include <glm/glm.hpp>
 #include <imgui/imgui.h>
 
+#include "solver.hpp"
+
 class App : public dubu::opengl_app::AppBase {
 public:
 	App()
@@ -11,7 +13,8 @@ public:
 	virtual ~App() = default;
 
 protected:
-	virtual void Init() override {}
+	virtual void Init() override { solver.addObject();
+	}
 
 	virtual void Update() override {
 		static float previousTime = static_cast<float>(glfwGetTime());
@@ -21,6 +24,8 @@ protected:
 		    std::min(currentTime - previousTime, 1.f / 60.f);
 		time += deltaTime;
 		previousTime = currentTime;
+
+		solver.update(deltaTime);
 
 		ImGui::DockSpaceOverViewport();
 
@@ -60,14 +65,13 @@ protected:
 			                       canvas_sz,
 			                       ImGuiButtonFlags_MouseButtonLeft |
 			                           ImGuiButtonFlags_MouseButtonRight);
-			//const bool   is_hovered = ImGui::IsItemHovered();  // Hovered
-			const bool   is_active  = ImGui::IsItemActive();   // Held
+			// const bool   is_hovered = ImGui::IsItemHovered();  // Hovered
+			const bool   is_active = ImGui::IsItemActive();  // Held
 			const ImVec2 origin(
 			    canvas_p0.x + scrolling.x,
 			    canvas_p0.y + scrolling.y);  // Lock scrolled origin
 			const ImVec2 mouse_pos_in_canvas(io.MousePos.x - origin.x,
 			                                 io.MousePos.y - origin.y);
-
 
 			// Pan (we use a zero mouse threshold when there's no context menu)
 			// You may decide to make that threshold dynamic based on whether
@@ -101,10 +105,13 @@ protected:
 				                   ImVec2(canvas_p1.x, canvas_p0.y + y),
 				                   IM_COL32(200, 200, 200, 40));
 
-			draw_list->AddCircleFilled(ImVec2(origin.x + std::cos(time) * 50.f,
-			                                  origin.y + std::sin(time) * 50.f),
-			                           5.f,
-			                           IM_COL32(255, 255, 255, 255));
+			solver.apply([&](const VerletObject& o) {
+				draw_list->AddCircleFilled(
+				    ImVec2(origin.x + o.currentPosition.x,
+				           origin.y + o.currentPosition.y),
+				    o.radius,
+				    IM_COL32(255, 255, 255, 255));
+			});
 
 			ImGui::EndChild();
 		}
@@ -112,6 +119,7 @@ protected:
 	}
 
 private:
+	Solver solver;
 };
 
 int main() {
