@@ -13,8 +13,7 @@ public:
 	virtual ~App() = default;
 
 protected:
-	virtual void Init() override { solver.addObject();
-	}
+	virtual void Init() override { solver.addObject(); }
 
 	virtual void Update() override {
 		static float previousTime = static_cast<float>(glfwGetTime());
@@ -65,13 +64,17 @@ protected:
 			                       canvas_sz,
 			                       ImGuiButtonFlags_MouseButtonLeft |
 			                           ImGuiButtonFlags_MouseButtonRight);
-			// const bool   is_hovered = ImGui::IsItemHovered();  // Hovered
-			const bool   is_active = ImGui::IsItemActive();  // Held
+			const bool   is_hovered = ImGui::IsItemHovered();  // Hovered
+			const bool   is_active  = ImGui::IsItemActive();   // Held
 			const ImVec2 origin(
 			    canvas_p0.x + scrolling.x,
 			    canvas_p0.y + scrolling.y);  // Lock scrolled origin
 			const ImVec2 mouse_pos_in_canvas(io.MousePos.x - origin.x,
 			                                 io.MousePos.y - origin.y);
+
+			if (is_hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+				solver.addObject();
+			}
 
 			// Pan (we use a zero mouse threshold when there's no context menu)
 			// You may decide to make that threshold dynamic based on whether
@@ -90,6 +93,9 @@ protected:
 			    drag_delta.x == 0.0f && drag_delta.y == 0.0f)
 				ImGui::OpenPopupOnItemClick("context");
 			if (ImGui::BeginPopup("context")) {
+				if (ImGui::MenuItem("Remove all", NULL, false)) {
+					solver.clear();
+				}
 				ImGui::EndPopup();
 			}
 
@@ -110,12 +116,16 @@ protected:
 				    ImVec2(origin.x + o.currentPosition.x,
 				           origin.y + o.currentPosition.y),
 				    o.radius,
-				    IM_COL32(255, 255, 255, 255));
+				    o.color);
 			});
 
 			ImGui::EndChild();
 		}
 		ImGui::End();
+
+		solver.debug();
+
+		ImGui::ShowDemoWindow();
 	}
 
 private:
