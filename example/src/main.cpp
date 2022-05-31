@@ -1,115 +1,117 @@
+#include <algorithm>
+
 #include <dubu_opengl_app/dubu_opengl_app.hpp>
-#include <glad/gl.h>
 #include <glm/glm.hpp>
 #include <imgui/imgui.h>
-
-constexpr glm::ivec2 SIZE{2048, 2048};
 
 class App : public dubu::opengl_app::AppBase {
 public:
 	App()
-	    : dubu::opengl_app::AppBase({.appName = "Example App"}) {}
+	    : dubu::opengl_app::AppBase({.appName = "Verlet Solver"}) {}
 	virtual ~App() = default;
 
 protected:
-	virtual void Init() override {
-		GLuint      shader       = glCreateShader(GL_COMPUTE_SHADER);
-		const char* shaderSource = R"(
-			#version 460
-
-			layout(local_size_x = 1, local_size_y = 1) in;
-			layout(rgba32f, binding = 0) uniform image2D img_output;
-
-			layout(location = 0) uniform float offset;
-
-			void main() {
-				vec2 pixel_coords = gl_GlobalInvocationID.xy;
-				vec4 pixel = vec4(mod(vec2(gl_GlobalInvocationID.xy) / 2048.0 + offset, 1.0), 0.0, 1.0);
-
-				vec4 prev = imageLoad(img_output, ivec2(pixel_coords));
-
-				imageStore(img_output, ivec2(pixel_coords), mix(prev, pixel, 0.01));
-			}
-		)";
-		glShaderSource(shader, 1, &shaderSource, NULL);
-		glCompileShader(shader);
-
-		mProgram = glCreateProgram();
-		glAttachShader(mProgram, shader);
-		glLinkProgram(mProgram);
-
-		glDeleteShader(shader);
-
-		glGenTextures(1, &mImage);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, mImage);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D,
-		             0,
-		             GL_RGBA32F,
-		             SIZE.x,
-		             SIZE.y,
-		             0,
-		             GL_RGBA,
-		             GL_FLOAT,
-		             NULL);
-		glBindImageTexture(
-		    0, mImage, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
-	}
+	virtual void Init() override {}
 
 	virtual void Update() override {
-		glUseProgram(mProgram);
-		glUniform1f(0, mOffset);
-		glDispatchCompute(SIZE.x, SIZE.y, 1);
+		static float previousTime = static_cast<float>(glfwGetTime());
+		static float time         = 0.f;
+		const float  currentTime  = static_cast<float>(glfwGetTime());
+		const float  deltaTime =
+		    std::min(currentTime - previousTime, 1.f / 60.f);
+		time += deltaTime;
+		previousTime = currentTime;
 
-		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		ImGui::DockSpaceOverViewport();
 
-		if (ImGui::Begin("Viewport")) {
-			ImVec2 regionMin = ImGui::GetWindowContentRegionMin();
-			ImVec2 regionMax = ImGui::GetWindowContentRegionMax();
-			ImVec2 offset    = regionMin;
-			ImVec2 regionSize =
-			    ImVec2(regionMax.x - regionMin.x, regionMax.y - regionMin.y);
-			ImVec2 imageSize = {static_cast<float>(SIZE.x),
-			                    static_cast<float>(SIZE.y)};
+		if (ImGui::Begin("Canvas")) {
+			ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();
+			ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
+			if (canvas_sz.x < 50.0f) canvas_sz.x = 50.0f;
+			if (canvas_sz.y < 50.0f) canvas_sz.y = 50.0f;
+			ImVec2 canvas_p1 =
+			    ImVec2(canvas_p0.x + canvas_sz.x, canvas_p0.y + canvas_sz.y);
 
-			float regionRatio = regionSize.x / regionSize.y;
-			float imageRatio =
-			    static_cast<float>(SIZE.x) / static_cast<float>(SIZE.y);
+			static ImVec2 scrolling(canvas_sz.x * 0.5f, canvas_sz.y * 0.5f);
 
-			if (regionRatio > imageRatio) {
-				imageSize.x *= regionSize.y / imageSize.y;
-				imageSize.y = regionSize.y;
-			} else {
-				imageSize.y *= regionSize.x / imageSize.x;
-				imageSize.x = regionSize.x;
+			// Draw border and background color
+			ImGuiIO&    io        = ImGui::GetIO();
+			ImDrawList* draw_list = ImGui::GetWindowDrawList();
+			draw_list->AddRectFilled(
+			    canvas_p0, canvas_p1, IM_COL32(50, 50, 50, 255));
+			draw_list->AddRect(
+			    canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));
+
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+			                    ImVec2(0,
+			                           0));  // Disable padding
+			ImGui::PushStyleColor(ImGuiCol_ChildBg,
+			                      IM_COL32(50,
+			                               50,
+			                               50,
+			                               255));  // Set a background color
+			ImGui::BeginChild(
+			    "canvas", ImVec2(0.0f, 0.0f), true, ImGuiWindowFlags_NoMove);
+			ImGui::PopStyleColor();
+			ImGui::PopStyleVar();
+
+			// This will catch our interactions
+			ImGui::InvisibleButton("canvas",
+			                       canvas_sz,
+			                       ImGuiButtonFlags_MouseButtonLeft |
+			                           ImGuiButtonFlags_MouseButtonRight);
+			//const bool   is_hovered = ImGui::IsItemHovered();  // Hovered
+			const bool   is_active  = ImGui::IsItemActive();   // Held
+			const ImVec2 origin(
+			    canvas_p0.x + scrolling.x,
+			    canvas_p0.y + scrolling.y);  // Lock scrolled origin
+			const ImVec2 mouse_pos_in_canvas(io.MousePos.x - origin.x,
+			                                 io.MousePos.y - origin.y);
+
+
+			// Pan (we use a zero mouse threshold when there's no context menu)
+			// You may decide to make that threshold dynamic based on whether
+			// the mouse is hovering something etc.
+			const float mouse_threshold_for_pan = -1.0f;
+			if (is_active && ImGui::IsMouseDragging(ImGuiMouseButton_Right,
+			                                        mouse_threshold_for_pan)) {
+				scrolling.x += io.MouseDelta.x;
+				scrolling.y += io.MouseDelta.y;
 			}
 
-			ImGui::SetCursorPosX((regionSize.x - imageSize.x) * 0.5f +
-			                     offset.x);
-			ImGui::SetCursorPosY((regionSize.y - imageSize.y) * 0.5f +
-			                     offset.y);
+			// Context menu (under default mouse threshold)
+			ImVec2 drag_delta =
+			    ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
+			if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+			    drag_delta.x == 0.0f && drag_delta.y == 0.0f)
+				ImGui::OpenPopupOnItemClick("context");
+			if (ImGui::BeginPopup("context")) {
+				ImGui::EndPopup();
+			}
 
-			ImGui::Image(reinterpret_cast<void*>(static_cast<intptr_t>(mImage)),
-			             imageSize,
-			             {0, 1},
-			             {1, 0});
-		}
-		ImGui::End();
+			const float GRID_STEP = 50.0f;
+			for (float x = fmodf(scrolling.x, GRID_STEP); x < canvas_sz.x;
+			     x += GRID_STEP)
+				draw_list->AddLine(ImVec2(canvas_p0.x + x, canvas_p0.y),
+				                   ImVec2(canvas_p0.x + x, canvas_p1.y),
+				                   IM_COL32(200, 200, 200, 40));
+			for (float y = fmodf(scrolling.y, GRID_STEP); y < canvas_sz.y;
+			     y += GRID_STEP)
+				draw_list->AddLine(ImVec2(canvas_p0.x, canvas_p0.y + y),
+				                   ImVec2(canvas_p1.x, canvas_p0.y + y),
+				                   IM_COL32(200, 200, 200, 40));
 
-		if (ImGui::Begin("Parameters")) {
-			ImGui::DragFloat("Offset", &mOffset, 0.01f);
+			draw_list->AddCircleFilled(ImVec2(origin.x + std::cos(time) * 50.f,
+			                                  origin.y + std::sin(time) * 50.f),
+			                           5.f,
+			                           IM_COL32(255, 255, 255, 255));
+
+			ImGui::EndChild();
 		}
 		ImGui::End();
 	}
 
 private:
-	GLuint mProgram;
-	GLuint mImage;
-	float  mOffset = 0.f;
 };
 
 int main() {
