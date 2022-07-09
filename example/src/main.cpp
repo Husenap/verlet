@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <imgui/imgui.h>
 
+#include "marching_squares.hpp"
 #include "solver.hpp"
 
 class App : public dubu::opengl_app::AppBase {
@@ -16,17 +17,29 @@ protected:
 	virtual void Init() override { solver.addObject(); }
 
 	virtual void Update() override {
-		static float previousTime = static_cast<float>(glfwGetTime());
-		static float time         = 0.f;
-		const float  currentTime  = static_cast<float>(glfwGetTime());
-		const float  deltaTime =
-		    std::min(currentTime - previousTime, 1.f / 60.f);
-		time += deltaTime;
-		previousTime = currentTime;
+		static float t           = 0.f;
+		static float dt          = 1.f / 60.f;
+		static float accumulator = 0.f;
 
-		solver.update(deltaTime);
+		static float currentTime = static_cast<float>(glfwGetTime());
+
+		const float newTime   = static_cast<float>(glfwGetTime());
+		const float frameTime = std::min(newTime - currentTime, 0.25f);
+		currentTime           = newTime;
+
+		accumulator += frameTime;
+
+		while (accumulator >= dt) {
+			solver.update(dt);
+			accumulator -= dt;
+		}
 
 		ImGui::DockSpaceOverViewport();
+
+		if (ImGui::Begin("Settings")) {
+			ImGui::DragFloat("zoom", &settings.zoom);
+		}
+		ImGui::End();
 
 		if (ImGui::Begin("Canvas")) {
 			ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();
@@ -111,25 +124,39 @@ protected:
 				                   ImVec2(canvas_p1.x, canvas_p0.y + y),
 				                   IM_COL32(200, 200, 200, 40));
 
+			const float zoom = settings.zoom;
+			glm::mat3   A(
+                zoom, 0.f, 0.f, 0.f, zoom, 0.f, origin.x, origin.y, 1.f);
+
+			const float mapRadius = solver.getMapRadius();
+			draw_list->AddCircle(
+			    {origin.x, origin.y}, mapRadius * zoom, 0xff666666);
+
+			marchingSquares.newFrame();
+
 			solver.apply([&](const VerletObject& o) {
-				draw_list->AddCircleFilled(
-				    ImVec2(origin.x + o.currentPosition.x,
-				           origin.y + o.currentPosition.y),
-				    o.radius,
-				    o.color);
+				marchingSquares.addCircle(o.currentPosition, o.radius);
 			});
+
+			marchingSquares.draw(draw_list, A);
 
 			ImGui::EndChild();
 		}
 		ImGui::End();
 
 		solver.debug();
+		marchingSquares.debug();
 
-		ImGui::ShowDemoWindow();
+		ImGui::ShowMetricsWindow();
 	}
 
 private:
-	Solver solver;
+	Solver          solver;
+	MarchingSquares marchingSquares;
+
+	struct {
+		float zoom = 1.f;
+	} settings;
 };
 
 int main() {

@@ -5,6 +5,7 @@ set(src_precompiled
 
 set(src_example
     "src/solver.hpp"
+    "src/marching_squares.hpp"
     "src/main.cpp")
 
 set(src_files
@@ -25,4 +26,6 @@ source_group("src" FILES ${src_example})
 source_group("src/precompiled" FILES ${src_precompiled})
 source_group("src/precompiled" REGULAR_EXPRESSION "cmake_pch\.[ch]xx")
 
-set_target_properties(${target_name} PROPERTIES FOLDER ${${PROJECT_NAME}_FOLDER}/test)
+set_target_properties(${target_name} PROPERTIES
+    FOLDER ${${PROJECT_NAME}_FOLDER}
+    VS_DEBUGGER_WORKING_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin)
