@@ -21,11 +21,9 @@ include("thirdparty/dubu_window.cmake")
 include("thirdparty/glm.cmake")
 add_subdirectory("thirdparty/glad")
 include("thirdparty/imgui.cmake")
-include("thirdparty/stb.cmake")
 
 add_subdirectory("dubu_opengl_app")
 
 if(${${PROJECT_NAME}_BUILD_TESTS})
     add_subdirectory("example")
 endif()
-
